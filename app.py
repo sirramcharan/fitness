@@ -43,6 +43,8 @@ def init_state() -> None:
         "timer_duration": REST_DURATION,
         "hold_index": 0,
         "plank_side_index": 0,
+        # sets_completed stores the NEXT set to do per exercise index.
+        # e.g. {0: 3} means Push-ups is on set 3 (sets 1 and 2 are done).
         "sets_completed": {},
         "workout_start_time": None,
     }
@@ -66,13 +68,36 @@ def reset_workout() -> None:
 
 def jump_to_exercise(target_idx: int) -> None:
     """
-    Jump directly to any exercise in the list.
-    Cancels any active timer, resets set/hold/plank state for the target exercise.
-    Does NOT wipe completed_exercises so prior progress is preserved visually.
+    Jump directly to any exercise.
+    - Saves the current set progress of the CURRENT exercise before leaving.
+    - Restores the previously saved set progress of the TARGET exercise.
+    - Cancels any active timer.
+    - Does NOT wipe completed_exercises so prior progress is preserved visually.
     """
     stop_timer()
+
+    # ── Save progress of the exercise we're leaving ──────────
+    leaving_idx = st.session_state.current_exercise_index
+    st.session_state.sets_completed[leaving_idx] = st.session_state.current_set
+
+    # ── Restore progress for the exercise we're jumping to ───
+    # If we've been there before, resume from where we left off.
+    # If it's a freshly visited exercise (or already fully completed), start at 1.
+    completed = st.session_state.completed_exercises
+    already_finished = target_idx < len(completed) and completed[target_idx]
+
+    if already_finished:
+        # Exercise was fully completed — restart from set 1 if they want to redo it
+        restored_set = 1
+        # Un-mark it as complete so the active panel re-activates properly
+        st.session_state.completed_exercises[target_idx] = False
+    else:
+        restored_set = st.session_state.sets_completed.get(target_idx, 1)
+
     st.session_state.current_exercise_index = target_idx
-    st.session_state.current_set = 1
+    st.session_state.current_set = restored_set
+
+    # Reset hold/plank sub-state for the target exercise
     st.session_state.hold_index = 0
     st.session_state.plank_side_index = 0
 
@@ -93,7 +118,6 @@ def inject_css() -> None:
 
 # ─────────────────────────────────────────────────────────────
 # RENDER: Clickable exercise checklist
-# Each item is a real Streamlit button — clicking jumps to that exercise.
 # ─────────────────────────────────────────────────────────────
 
 def render_exercise_checklist(exercises: list, current_index: int) -> None:
@@ -121,11 +145,18 @@ def render_exercise_checklist(exercises: list, current_index: int) -> None:
 
         label = f"{ex.get('emoji', '')} {ex['name']}"
 
-        # Wrap in a div that provides the glass-card style per item
+        # Show saved set progress for reps exercises
+        set_hint = ""
+        if ex.get("type", "reps") == "reps" and not is_done:
+            saved_set = st.session_state.sets_completed.get(i, 1)
+            is_fullbody = st.session_state.workout_type == "fullbody"
+            total_sets = st.session_state.total_sets if is_fullbody else ex.get("sets", 3)
+            if saved_set > 1:
+                set_hint = f" ({saved_set-1}/{total_sets})"
+
         st.markdown(f'<div class="{item_cls}">', unsafe_allow_html=True)
 
-        # Real Streamlit button — clicking jumps directly to this exercise
-        btn_label = f"{status_icon}  {label}"
+        btn_label = f"{status_icon}  {label}{set_hint}"
         if st.button(btn_label, key=f"jump_ex_{i}", use_container_width=True):
             jump_to_exercise(i)
             st.rerun()
@@ -136,7 +167,7 @@ def render_exercise_checklist(exercises: list, current_index: int) -> None:
 
 
 # ─────────────────────────────────────────────────────────────
-# RENDER: Timer display (no sleep/rerun inside — caller handles)
+# RENDER: Timer display
 # ─────────────────────────────────────────────────────────────
 
 def render_timer_display(duration_seconds: int, label: str = "⏱ Rest Time") -> float:
@@ -290,7 +321,11 @@ def advance_exercise() -> None:
         st.session_state.page = "complete"
     else:
         st.session_state.current_exercise_index = next_idx
-        st.session_state.current_set = 1
+        # Restore saved progress for the next exercise (or start fresh)
+        restored_set = st.session_state.sets_completed.get(next_idx, 1)
+        completed = st.session_state.completed_exercises
+        already_finished = next_idx < len(completed) and completed[next_idx]
+        st.session_state.current_set = 1 if already_finished else restored_set
         st.session_state.hold_index = 0
         st.session_state.plank_side_index = 0
         stop_timer()
@@ -350,10 +385,10 @@ def render_reps_exercise(ex: dict, idx: int) -> None:
 
     st.markdown('<div class="btn-primary">', unsafe_allow_html=True)
     if st.button(f"✅ Complete Set {current_set}", key=f"complete_set_{idx}_{current_set}"):
-        sets_done = st.session_state.sets_completed.get(idx, 0) + 1
-        st.session_state.sets_completed[idx] = sets_done
         next_set = current_set + 1
         st.session_state.current_set = next_set
+        # Always persist the updated set counter for this exercise
+        st.session_state.sets_completed[idx] = next_set
         is_last_exercise = idx == len(get_exercises()) - 1
         if next_set > total_sets:
             if is_last_exercise:
@@ -580,7 +615,7 @@ def render_workout_page() -> None:
 
     st.markdown(
         f'<div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-bottom:0.3rem;">'
-        f'{completed_cnt} of {total} exercises complete — tap any exercise on the left to jump to it</div>',
+        f'{completed_cnt} of {total} exercises complete — tap any exercise to jump to it</div>',
         unsafe_allow_html=True,
     )
     st.progress(pct)
@@ -618,7 +653,9 @@ def render_completion_page() -> None:
         emoji   = ex.get("emoji", "")
         ex_type = ex.get("type", "reps")
         if ex_type == "reps":
-            sets_done = st.session_state.sets_completed.get(i, 0)
+            is_fullbody = st.session_state.workout_type == "fullbody"
+            total_sets = st.session_state.total_sets if is_fullbody else ex.get("sets", 3)
+            sets_done = max(0, st.session_state.sets_completed.get(i, 1) - 1)
             reps      = ex.get("reps", 15)
             detail    = f"{sets_done} sets × {reps} reps = {sets_done * reps} reps"
         elif ex_type == "hold_series":
