@@ -115,18 +115,15 @@ def render_exercise_checklist(exercises: list, current_index: int) -> None:
 
 
 # ─────────────────────────────────────────────────────────────
-# RENDER: Timer
+# RENDER: Timer (display only — no sleep/rerun inside)
 # ─────────────────────────────────────────────────────────────
 
-def render_timer(duration_seconds: int, label: str = "⏱ Rest Time") -> bool:
+def render_timer_display(duration_seconds: int, label: str = "⏱ Rest Time") -> float:
     """
-    Renders a live countdown timer.
-    Returns True if the timer has finished (caller should advance state).
-    Uses st.empty() + time.sleep(1) + st.rerun() pattern.
+    Renders the timer UI and returns the remaining seconds.
+    Does NOT call time.sleep() or st.rerun() — caller is responsible.
+    Returns remaining seconds (0 if expired).
     """
-    if not st.session_state.timer_active:
-        return False
-
     elapsed = (datetime.datetime.now() - st.session_state.timer_start).total_seconds()
     remaining = max(0.0, duration_seconds - elapsed)
 
@@ -150,14 +147,7 @@ def render_timer(duration_seconds: int, label: str = "⏱ Rest Time") -> bool:
         """,
         unsafe_allow_html=True,
     )
-
-    if remaining <= 0:
-        return True   # timer finished
-
-    # Auto-rerun every second
-    time.sleep(1)
-    st.rerun()
-    return False  # unreachable, but satisfies linters
+    return remaining
 
 
 # ─────────────────────────────────────────────────────────────
@@ -307,32 +297,35 @@ def render_reps_exercise(ex: dict, idx: int) -> None:
     total_sets  = st.session_state.total_sets if is_fullbody else ex.get("sets", 3)
     current_set = st.session_state.current_set
     reps        = ex.get("reps", 15)
-    is_last_set = current_set > total_sets
 
-    # If timer is currently running
+    # If timer is currently running — render Skip button FIRST, then timer display
     if st.session_state.timer_active:
-        timer_done = render_timer(st.session_state.timer_duration, "⏱ Rest Time")
-
+        # ✅ FIX: Skip button rendered BEFORE render_timer_display so it appears
+        # before the time.sleep(1)+st.rerun() cycle wipes the page.
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
-            if st.button("⏭ Skip Rest", key=f"skip_{idx}"):
+            if st.button("⏭ Skip Rest", key=f"skip_{idx}_{current_set}"):
                 stop_timer()
                 if current_set > total_sets:
                     advance_exercise()
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        if timer_done:
+        remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
+
+        if remaining <= 0:
             stop_timer()
             if current_set > total_sets:
                 advance_exercise()
+            st.rerun()
+        else:
+            time.sleep(1)
             st.rerun()
         return
 
     # Show set info
     if current_set > total_sets:
-        # All sets done — waiting between exercises (shouldn't normally be seen)
         st.markdown(
             '<div class="glass-card-inner" style="text-align:center;">'
             '<div style="font-size:1.4rem;color:#22d3ee;font-weight:700;">✅ All sets complete!</div>'
@@ -381,8 +374,7 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
 
     # If a rest timer is running AFTER completing all holds
     if st.session_state.timer_active and all_done:
-        timer_done = render_timer(st.session_state.timer_duration, "⏱ Rest Time")
-
+        # ✅ FIX: Skip button rendered BEFORE timer display
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
@@ -392,13 +384,18 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        if timer_done:
+        remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
+
+        if remaining <= 0:
             stop_timer()
             advance_exercise()
             st.rerun()
+        else:
+            time.sleep(1)
+            st.rerun()
         return
 
-    # All holds done (no timer yet) — shouldn't linger here
+    # All holds done (no timer yet)
     if all_done:
         advance_exercise()
         st.rerun()
@@ -430,21 +427,21 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
         unsafe_allow_html=True,
     )
 
-    # If timer is running for the CURRENT hold
+    # If timer is running for the CURRENT hold — no skip, just display
     if st.session_state.timer_active:
-        timer_done = render_timer(current_hold["duration"], f"⏱ Hold {hold_idx + 1}")
+        remaining = render_timer_display(current_hold["duration"], f"⏱ Hold {hold_idx + 1}")
 
-        # No skip during individual holds
-        if timer_done:
+        if remaining <= 0:
             stop_timer()
             st.session_state.hold_index += 1
             next_hold_idx = st.session_state.hold_index
             if next_hold_idx < len(holds):
-                # Auto-start next hold timer immediately
                 start_rest_timer(holds[next_hold_idx]["duration"])
             else:
-                # Series complete — start 4-min rest
                 start_rest_timer(REST_DURATION)
+            st.rerun()
+        else:
+            time.sleep(1)
             st.rerun()
         return
 
@@ -464,8 +461,7 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
 
     # Rest timer after completing both sides
     if st.session_state.timer_active and all_done:
-        timer_done = render_timer(st.session_state.timer_duration, "⏱ Rest Time")
-
+        # ✅ FIX: Skip button rendered BEFORE timer display
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
@@ -475,9 +471,14 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        if timer_done:
+        remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
+
+        if remaining <= 0:
             stop_timer()
             advance_exercise()
+            st.rerun()
+        else:
+            time.sleep(1)
             st.rerun()
         return
 
@@ -509,20 +510,35 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
         unsafe_allow_html=True,
     )
 
-    # Timer for current side
+    # Timer for current side — show Skip Side button FIRST
     if st.session_state.timer_active:
-        timer_done = render_timer(duration, f"⏱ {current_side} Side")
+        col_skip, _ = st.columns([1, 2])
+        with col_skip:
+            st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
+            if st.button(f"⏭ Skip {current_side}", key=f"skip_side_{idx}_{side_idx}"):
+                stop_timer()
+                st.session_state.plank_side_index += 1
+                next_side_idx = st.session_state.plank_side_index
+                if next_side_idx < len(sides):
+                    start_rest_timer(duration)
+                else:
+                    start_rest_timer(REST_DURATION)
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        if timer_done:
+        remaining = render_timer_display(duration, f"⏱ {current_side} Side")
+
+        if remaining <= 0:
             stop_timer()
             st.session_state.plank_side_index += 1
             next_side_idx = st.session_state.plank_side_index
             if next_side_idx < len(sides):
-                # Auto-start next side immediately
                 start_rest_timer(duration)
             else:
-                # Both sides done — start 4-min rest
                 start_rest_timer(REST_DURATION)
+            st.rerun()
+        else:
+            time.sleep(1)
             st.rerun()
         return
 
