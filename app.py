@@ -32,18 +32,18 @@ st.set_page_config(
 
 def init_state() -> None:
     defaults = {
-        "page": "home",               # "home" | "setup" | "workout" | "complete"
-        "workout_type": None,         # "fullbody" | "abs"
+        "page": "home",
+        "workout_type": None,
         "current_exercise_index": 0,
         "current_set": 1,
-        "total_sets": DEFAULT_SETS,   # user-chosen for full-body
-        "completed_exercises": [],    # list[bool]
+        "total_sets": DEFAULT_SETS,
+        "completed_exercises": [],
         "timer_active": False,
-        "timer_start": None,          # datetime.datetime
+        "timer_start": None,
         "timer_duration": REST_DURATION,
-        "hold_index": 0,              # 0-2 for Core Hold Series
-        "plank_side_index": 0,        # 0=Left, 1=Right for Side Plank
-        "sets_completed": {},         # {exercise_index: int}
+        "hold_index": 0,
+        "plank_side_index": 0,
+        "sets_completed": {},
         "workout_start_time": None,
     }
     for key, val in defaults.items():
@@ -52,7 +52,6 @@ def init_state() -> None:
 
 
 def reset_workout() -> None:
-    """Reset all workout progress state."""
     st.session_state.current_exercise_index = 0
     st.session_state.current_set = 1
     st.session_state.completed_exercises = []
@@ -65,8 +64,21 @@ def reset_workout() -> None:
     st.session_state.workout_start_time = None
 
 
+def jump_to_exercise(target_idx: int) -> None:
+    """
+    Jump directly to any exercise in the list.
+    Cancels any active timer, resets set/hold/plank state for the target exercise.
+    Does NOT wipe completed_exercises so prior progress is preserved visually.
+    """
+    stop_timer()
+    st.session_state.current_exercise_index = target_idx
+    st.session_state.current_set = 1
+    st.session_state.hold_index = 0
+    st.session_state.plank_side_index = 0
+
+
 # ─────────────────────────────────────────────────────────────
-# HELPER: get current exercises list
+# HELPER
 # ─────────────────────────────────────────────────────────────
 
 def get_exercises():
@@ -75,55 +87,59 @@ def get_exercises():
     return ABS_EXERCISES
 
 
-# ─────────────────────────────────────────────────────────────
-# RENDER: CSS injection
-# ─────────────────────────────────────────────────────────────
-
 def inject_css() -> None:
     st.markdown(get_css(), unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────
-# RENDER: Exercise checklist (sidebar panel)
+# RENDER: Clickable exercise checklist
+# Each item is a real Streamlit button — clicking jumps to that exercise.
 # ─────────────────────────────────────────────────────────────
 
 def render_exercise_checklist(exercises: list, current_index: int) -> None:
     completed = st.session_state.completed_exercises
-    html_items = ""
-    for i, ex in enumerate(exercises):
-        is_done   = i < len(completed) and completed[i]
-        is_active = i == current_index
-        cls  = "exercise-item"
-        if is_done:
-            cls += " done"
-            icon = "✅"
-        elif is_active:
-            cls += " active"
-            icon = "▶️"
-        else:
-            icon = "○"
-        label = f"{ex.get('emoji','')}&nbsp;{ex['name']}"
-        html_items += f'<div class="{cls}"><span class="check-icon">{icon}</span>{label}</div>'
 
     st.markdown(
-        f'<div class="glass-card" style="padding:1.1rem 1.2rem;">'
-        f'<div class="section-header">Today\'s Exercises</div>'
-        f'{html_items}'
-        f'</div>',
+        '<div class="glass-card" style="padding:1.1rem 1.2rem;">'
+        '<div class="section-header">Today\'s Exercises</div>',
         unsafe_allow_html=True,
     )
 
+    for i, ex in enumerate(exercises):
+        is_done   = i < len(completed) and completed[i]
+        is_active = i == current_index
+
+        if is_done:
+            status_icon = "✅"
+            item_cls = "exercise-item done"
+        elif is_active:
+            status_icon = "▶️"
+            item_cls = "exercise-item active"
+        else:
+            status_icon = "○"
+            item_cls = "exercise-item"
+
+        label = f"{ex.get('emoji', '')} {ex['name']}"
+
+        # Wrap in a div that provides the glass-card style per item
+        st.markdown(f'<div class="{item_cls}">', unsafe_allow_html=True)
+
+        # Real Streamlit button — clicking jumps directly to this exercise
+        btn_label = f"{status_icon}  {label}"
+        if st.button(btn_label, key=f"jump_ex_{i}", use_container_width=True):
+            jump_to_exercise(i)
+            st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────────────────────
-# RENDER: Timer (display only — no sleep/rerun inside)
+# RENDER: Timer display (no sleep/rerun inside — caller handles)
 # ─────────────────────────────────────────────────────────────
 
 def render_timer_display(duration_seconds: int, label: str = "⏱ Rest Time") -> float:
-    """
-    Renders the timer UI and returns the remaining seconds.
-    Does NOT call time.sleep() or st.rerun() — caller is responsible.
-    Returns remaining seconds (0 if expired).
-    """
     elapsed = (datetime.datetime.now() - st.session_state.timer_start).total_seconds()
     remaining = max(0.0, duration_seconds - elapsed)
 
@@ -131,8 +147,7 @@ def render_timer_display(duration_seconds: int, label: str = "⏱ Rest Time") ->
     secs = int(remaining) % 60
     time_str = f"{mins:02d}:{secs:02d}"
     pct_left = remaining / duration_seconds if duration_seconds > 0 else 0
-    fill_pct  = pct_left * 100
-
+    fill_pct = pct_left * 100
     warning_cls = " warning" if remaining < 30 else ""
 
     st.markdown(
@@ -185,13 +200,11 @@ def render_home_page() -> None:
             st.session_state.workout_type = "abs"
             st.session_state.page = "workout"
             reset_workout()
-            # Initialise completed list for abs
             st.session_state.completed_exercises = [False] * len(ABS_EXERCISES)
             st.session_state.workout_start_time = datetime.datetime.now()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Stats hint
     st.markdown(
         '<div style="text-align:center;margin-top:2rem;color:rgba(255,255,255,0.35);font-size:0.82rem;">'
         "Full Body: 5 exercises · 4–8 sets · 15 reps each &nbsp;|&nbsp; "
@@ -202,7 +215,7 @@ def render_home_page() -> None:
 
 
 # ─────────────────────────────────────────────────────────────
-# RENDER: Setup page (Full Body set count)
+# RENDER: Setup page
 # ─────────────────────────────────────────────────────────────
 
 def render_setup_page() -> None:
@@ -216,7 +229,6 @@ def render_setup_page() -> None:
         "</div>",
         unsafe_allow_html=True,
     )
-
     total_sets = st.select_slider(
         "Sets per exercise",
         options=[4, 5, 6, 7, 8],
@@ -225,7 +237,6 @@ def render_setup_page() -> None:
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Preview card
     total_reps = total_sets * 15 * len(FULLBODY_EXERCISES)
     st.markdown(
         f'<div class="glass-card-inner" style="text-align:center;">'
@@ -244,7 +255,6 @@ def render_setup_page() -> None:
             st.session_state.page = "home"
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-
     with col_start:
         st.markdown('<div class="btn-primary">', unsafe_allow_html=True)
         if st.button("🚀 Start Workout", key="setup_start"):
@@ -272,7 +282,6 @@ def stop_timer() -> None:
 
 
 def advance_exercise() -> None:
-    """Mark current exercise complete and move to the next, or finish workout."""
     idx = st.session_state.current_exercise_index
     st.session_state.completed_exercises[idx] = True
     next_idx = idx + 1
@@ -292,16 +301,12 @@ def advance_exercise() -> None:
 # ─────────────────────────────────────────────────────────────
 
 def render_reps_exercise(ex: dict, idx: int) -> None:
-    """Handles 'reps' type exercises (Full Body or Crucifix Crunches)."""
     is_fullbody = st.session_state.workout_type == "fullbody"
     total_sets  = st.session_state.total_sets if is_fullbody else ex.get("sets", 3)
     current_set = st.session_state.current_set
     reps        = ex.get("reps", 15)
 
-    # If timer is currently running — render Skip button FIRST, then timer display
     if st.session_state.timer_active:
-        # ✅ FIX: Skip button rendered BEFORE render_timer_display so it appears
-        # before the time.sleep(1)+st.rerun() cycle wipes the page.
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
@@ -313,7 +318,6 @@ def render_reps_exercise(ex: dict, idx: int) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
-
         if remaining <= 0:
             stop_timer()
             if current_set > total_sets:
@@ -324,7 +328,6 @@ def render_reps_exercise(ex: dict, idx: int) -> None:
             st.rerun()
         return
 
-    # Show set info
     if current_set > total_sets:
         st.markdown(
             '<div class="glass-card-inner" style="text-align:center;">'
@@ -351,30 +354,24 @@ def render_reps_exercise(ex: dict, idx: int) -> None:
         st.session_state.sets_completed[idx] = sets_done
         next_set = current_set + 1
         st.session_state.current_set = next_set
-
         is_last_exercise = idx == len(get_exercises()) - 1
         if next_set > total_sets:
-            # All sets done
             if is_last_exercise:
                 advance_exercise()
             else:
                 start_rest_timer(REST_DURATION)
         else:
-            # Between sets — start rest
             start_rest_timer(REST_DURATION)
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_hold_series_exercise(ex: dict, idx: int) -> None:
-    """Handles Core Hold Series (3 consecutive 30s holds)."""
-    holds      = ex["holds"]
-    hold_idx   = st.session_state.hold_index
-    all_done   = hold_idx >= len(holds)
+    holds    = ex["holds"]
+    hold_idx = st.session_state.hold_index
+    all_done = hold_idx >= len(holds)
 
-    # If a rest timer is running AFTER completing all holds
     if st.session_state.timer_active and all_done:
-        # ✅ FIX: Skip button rendered BEFORE timer display
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
@@ -385,7 +382,6 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
-
         if remaining <= 0:
             stop_timer()
             advance_exercise()
@@ -395,7 +391,6 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
             st.rerun()
         return
 
-    # All holds done (no timer yet)
     if all_done:
         advance_exercise()
         st.rerun()
@@ -403,7 +398,6 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
 
     current_hold = holds[hold_idx]
 
-    # Dot indicator
     dots_html = '<div class="hold-dot-row">'
     for i in range(len(holds)):
         if i < hold_idx:
@@ -415,22 +409,16 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
     dots_html += "</div>"
 
     st.markdown(
-        f'<div class="glass-card">'
-        f'{dots_html}'
-        f'<div class="set-label" style="margin-top:0.5rem;">'
-        f'Hold {hold_idx+1} of {len(holds)}</div>'
+        f'<div class="glass-card">{dots_html}'
+        f'<div class="set-label" style="margin-top:0.5rem;">Hold {hold_idx+1} of {len(holds)}</div>'
         f'<div class="reps-label">⏱ {current_hold["duration"]} seconds</div>'
-        f'<div style="color:rgba(255,255,255,0.6);font-size:0.9rem;margin-bottom:0.75rem;">'
-        f'{current_hold["name"]}'
-        f'</div>'
+        f'<div style="color:rgba(255,255,255,0.6);font-size:0.9rem;margin-bottom:0.75rem;">{current_hold["name"]}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    # If timer is running for the CURRENT hold — no skip, just display
     if st.session_state.timer_active:
         remaining = render_timer_display(current_hold["duration"], f"⏱ Hold {hold_idx + 1}")
-
         if remaining <= 0:
             stop_timer()
             st.session_state.hold_index += 1
@@ -453,15 +441,12 @@ def render_hold_series_exercise(ex: dict, idx: int) -> None:
 
 
 def render_timed_sides_exercise(ex: dict, idx: int) -> None:
-    """Handles Side Plank Raises (45s each side)."""
-    sides      = ex["sides"]
-    side_idx   = st.session_state.plank_side_index
-    duration   = ex["duration"]
-    all_done   = side_idx >= len(sides)
+    sides    = ex["sides"]
+    side_idx = st.session_state.plank_side_index
+    duration = ex["duration"]
+    all_done = side_idx >= len(sides)
 
-    # Rest timer after completing both sides
     if st.session_state.timer_active and all_done:
-        # ✅ FIX: Skip button rendered BEFORE timer display
         col_skip, _ = st.columns([1, 2])
         with col_skip:
             st.markdown('<div class="btn-skip">', unsafe_allow_html=True)
@@ -472,7 +457,6 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         remaining = render_timer_display(st.session_state.timer_duration, "⏱ Rest Time")
-
         if remaining <= 0:
             stop_timer()
             advance_exercise()
@@ -489,7 +473,6 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
 
     current_side = sides[side_idx]
 
-    # Side dot indicator
     dots_html = '<div class="hold-dot-row">'
     for i in range(len(sides)):
         if i < side_idx:
@@ -501,16 +484,13 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
     dots_html += "</div>"
 
     st.markdown(
-        f'<div class="glass-card">'
-        f'{dots_html}'
-        f'<div class="set-label" style="margin-top:0.5rem;">'
-        f'{current_side} Side — {side_idx+1} of {len(sides)}</div>'
+        f'<div class="glass-card">{dots_html}'
+        f'<div class="set-label" style="margin-top:0.5rem;">{current_side} Side — {side_idx+1} of {len(sides)}</div>'
         f'<div class="reps-label">⏱ {duration} seconds</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    # Timer for current side — show Skip Side button FIRST
     if st.session_state.timer_active:
         col_skip, _ = st.columns([1, 2])
         with col_skip:
@@ -527,7 +507,6 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
         remaining = render_timer_display(duration, f"⏱ {current_side} Side")
-
         if remaining <= 0:
             stop_timer()
             st.session_state.plank_side_index += 1
@@ -555,20 +534,16 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
 
 def render_active_exercise() -> None:
     exercises = get_exercises()
-    idx       = st.session_state.current_exercise_index
-    ex        = exercises[idx]
-
-    emoji = ex.get("emoji", "")
-    name  = ex["name"]
+    idx = st.session_state.current_exercise_index
+    ex  = exercises[idx]
 
     st.markdown(
-        f'<div class="exercise-title">{emoji} {name}</div>',
+        f'<div class="exercise-title">{ex.get("emoji", "")} {ex["name"]}</div>',
         unsafe_allow_html=True,
     )
     st.markdown('<div class="glass-divider"></div>', unsafe_allow_html=True)
 
     ex_type = ex.get("type", "reps")
-
     if ex_type == "reps":
         render_reps_exercise(ex, idx)
     elif ex_type == "hold_series":
@@ -589,7 +564,6 @@ def render_workout_page() -> None:
 
     wname = "🏋️ Full Body Workout" if st.session_state.workout_type == "fullbody" else "🔥 Abs Workout"
 
-    # Top bar
     col_back, col_title = st.columns([1, 4], gap="small")
     with col_back:
         st.markdown('<div class="btn-back">', unsafe_allow_html=True)
@@ -600,26 +574,21 @@ def render_workout_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
     with col_title:
         st.markdown(
-            f'<div style="font-size:1.1rem;font-weight:700;color:#a78bfa;padding-top:0.4rem;">'
-            f'{wname}</div>',
+            f'<div style="font-size:1.1rem;font-weight:700;color:#a78bfa;padding-top:0.4rem;">{wname}</div>',
             unsafe_allow_html=True,
         )
 
-    # Progress
     st.markdown(
         f'<div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-bottom:0.3rem;">'
-        f'{completed_cnt} of {total} exercises complete</div>',
+        f'{completed_cnt} of {total} exercises complete — tap any exercise on the left to jump to it</div>',
         unsafe_allow_html=True,
     )
     st.progress(pct)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Two-column layout: checklist | active exercise
     col_list, col_active = st.columns([1, 2], gap="medium")
-
     with col_list:
         render_exercise_checklist(exercises, st.session_state.current_exercise_index)
-
     with col_active:
         render_active_exercise()
 
@@ -646,7 +615,7 @@ def render_completion_page() -> None:
 
     st.markdown('<div class="glass-card"><div class="section-header">Summary</div>', unsafe_allow_html=True)
     for i, ex in enumerate(exercises):
-        emoji = ex.get("emoji", "")
+        emoji   = ex.get("emoji", "")
         ex_type = ex.get("type", "reps")
         if ex_type == "reps":
             sets_done = st.session_state.sets_completed.get(i, 0)
@@ -685,7 +654,6 @@ def main() -> None:
     init_state()
 
     page = st.session_state.page
-
     if page == "home":
         render_home_page()
     elif page == "setup":
