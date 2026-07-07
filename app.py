@@ -514,18 +514,26 @@ def render_active_exercise() -> None:
 # ─────────────────────────────────────────────────────────────
 
 def render_home_page() -> None:
+    # Center everything inside .main-container
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
     st.markdown(
         '<div class="app-title">💪 Workout Tracker</div>'
         '<div class="app-subtitle">3x / week training plan</div>',
         unsafe_allow_html=True,
     )
+
     st.markdown(
-        '<div class="glass-card" style="text-align:center;padding:1.4rem 1.6rem;">'
-        '<div style="color:rgba(255,255,255,0.6);font-size:0.95rem;">Select today\'s workout to begin</div>'
-        '</div>',
+        '<div class="glass-card" style="text-align:center;">'
+        '<div style="color:rgba(255,255,255,0.7);font-size:0.95rem;">'
+        "Select today's workout to begin"
+        "</div>"
+        "</div>",
         unsafe_allow_html=True,
     )
+
     col1, col2 = st.columns(2, gap="medium")
+
     with col1:
         st.markdown('<div class="btn-home">', unsafe_allow_html=True)
         if st.button("🏋️ Full Body\nWorkout", key="btn_fullbody"):
@@ -534,6 +542,7 @@ def render_home_page() -> None:
             reset_workout()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
     with col2:
         st.markdown('<div class="btn-home">', unsafe_allow_html=True)
         if st.button("🔥 Abs\nWorkout", key="btn_abs"):
@@ -544,13 +553,8 @@ def render_home_page() -> None:
             st.session_state.workout_start_time = datetime.datetime.now()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown(
-        '<div style="text-align:center;margin-top:2rem;color:rgba(255,255,255,0.35);font-size:0.82rem;">'
-        "Full Body: 5 exercises · 4–8 sets · 15 reps each &nbsp;|&nbsp; Abs: 3 exercises · mixed reps & holds"
-        "</div>",
-        unsafe_allow_html=True,
-    )
 
+    st.markdown("</div>", unsafe_allow_html=True)  # close .main-container
 
 # ─────────────────────────────────────────────────────────────
 # RENDER: Setup page
