@@ -492,6 +492,10 @@ def render_active_exercise() -> None:
     )
     st.markdown('<div class="glass-divider"></div>', unsafe_allow_html=True)
 
+    # Show description + picture for full-body exercises
+    if st.session_state.workout_type == "fullbody":
+        render_exercise_details(ex)
+
     ex_type = ex.get("type", "reps")
     if ex_type == "reps":
         render_reps_exercise(ex, idx)
@@ -499,7 +503,6 @@ def render_active_exercise() -> None:
         render_hold_series_exercise(ex, idx)
     elif ex_type == "timed_sides":
         render_timed_sides_exercise(ex, idx)
-
 
 # ─────────────────────────────────────────────────────────────
 # RENDER: Home page
