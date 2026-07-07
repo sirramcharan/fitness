@@ -230,5 +230,16 @@ button[kind="primary"]:hover,
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(148, 163, 184, 0.9);
 }
+/* Center main content container */
+.main-container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 3.5rem;
+}
+
+/* Ensure home glass card uses full container width */
+.main-container .glass-card {
+    width: 100%;
+}
 </style>
 """
