@@ -534,28 +534,31 @@ def render_home_page() -> None:
 
     left, mid, right = st.columns([1, 2, 1])
 
-with mid:
-    c1, c2 = st.columns(2, gap="medium")
+    # Center the two buttons as a row
+    col_spacer_left, col_buttons, col_spacer_right = st.columns([1, 2, 1])
 
-    with c1:
-        st.markdown('<div class="btn-home">', unsafe_allow_html=True)
-        if st.button("🏋️ Full Body\nWorkout", key="btn_fullbody"):
-            st.session_state.workout_type = "fullbody"
-            st.session_state.page = "setup"
-            reset_workout()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+    with col_buttons:
+        b1, b2 = st.columns(2, gap="medium")
 
-    with c2:
-        st.markdown('<div class="btn-home">', unsafe_allow_html=True)
-        if st.button("🔥 Abs\nWorkout", key="btn_abs"):
-            st.session_state.workout_type = "abs"
-            st.session_state.page = "workout"
-            reset_workout()
-            st.session_state.completed_exercises = [False] * len(ABS_EXERCISES)
-            st.session_state.workout_start_time = datetime.datetime.now()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+        with b1:
+            st.markdown('<div class="btn-home">', unsafe_allow_html=True)
+            if st.button("🏋️ Full Body\nWorkout", key="btn_fullbody"):
+                st.session_state.workout_type = "fullbody"
+                st.session_state.page = "setup"
+                reset_workout()
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with b2:
+            st.markdown('<div class="btn-home">', unsafe_allow_html=True)
+            if st.button("🔥 Abs\nWorkout", key="btn_abs"):
+                st.session_state.workout_type = "abs"
+                st.session_state.page = "workout"
+                reset_workout()
+                st.session_state.completed_exercises = [False] * len(ABS_EXERCISES)
+                st.session_state.workout_start_time = datetime.datetime.now()
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────
 # RENDER: Setup page
 # ─────────────────────────────────────────────────────────────
