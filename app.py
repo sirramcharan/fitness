@@ -532,9 +532,12 @@ def render_home_page() -> None:
         unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns(2, gap="medium")
+    left, mid, right = st.columns([1, 2, 1])
 
-    with col1:
+with mid:
+    c1, c2 = st.columns(2, gap="medium")
+
+    with c1:
         st.markdown('<div class="btn-home">', unsafe_allow_html=True)
         if st.button("🏋️ Full Body\nWorkout", key="btn_fullbody"):
             st.session_state.workout_type = "fullbody"
@@ -543,7 +546,7 @@ def render_home_page() -> None:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with col2:
+    with c2:
         st.markdown('<div class="btn-home">', unsafe_allow_html=True)
         if st.button("🔥 Abs\nWorkout", key="btn_abs"):
             st.session_state.workout_type = "abs"
@@ -553,9 +556,6 @@ def render_home_page() -> None:
             st.session_state.workout_start_time = datetime.datetime.now()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)  # close .main-container
-
 # ─────────────────────────────────────────────────────────────
 # RENDER: Setup page
 # ─────────────────────────────────────────────────────────────
