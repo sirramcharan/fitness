@@ -459,6 +459,27 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
 # ─────────────────────────────────────────────────────────────
 # RENDER: Active exercise dispatcher
 # ─────────────────────────────────────────────────────────────
+# RENDER: Exercise details (steps + picture) for full-body
+# ─────────────────────────────────────────────────────────────
+def render_exercise_details(ex: dict) -> None:
+    # Picture
+    if ex.get("image_url"):
+        st.image(ex["image_url"], use_container_width=True)
+
+    # Steps
+    steps = ex.get("description_steps", [])
+    if steps:
+        st.markdown('<div class="glass-card-inner">', unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-header'>How to do it</div>",
+            unsafe_allow_html=True,
+        )
+        for i, step in enumerate(steps, start=1):
+            st.markdown(f"{i}. {step}")
+        st.markdown("</div>", unsafe_allow_html=True)
+# ─────────────────────────────────────────────────────────────
+
+
 
 def render_active_exercise() -> None:
     exercises = get_exercises()
