@@ -462,9 +462,14 @@ def render_timed_sides_exercise(ex: dict, idx: int) -> None:
 # RENDER: Exercise details (steps + picture) for full-body
 # ─────────────────────────────────────────────────────────────
 def render_exercise_details(ex: dict) -> None:
-    # Picture
-    if ex.get("image_url"):
-        st.image(ex["image_url"], use_container_width=True)
+    # Picture (optional, avoid crash if file not present yet)
+    image_path = ex.get("image_url")
+    if image_path:
+        try:
+            st.image(image_path, use_container_width=True)
+        except Exception:
+            # Silently ignore missing/bad image until you add real files
+            pass
 
     # Steps
     steps = ex.get("description_steps", [])
