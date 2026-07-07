@@ -537,11 +537,11 @@ def render_setup_page() -> None:
         unsafe_allow_html=True,
     )
     total_sets = st.select_slider(
-        "Sets per exercise",
-        options=[4, 5, 6, 7, 8],
-        value=st.session_state.total_sets,
-        key="set_slider",
-    )
+    "Sets per exercise",
+    options=list(range(0, 11)),  # 0–10
+    value=min(max(st.session_state.total_sets, 0), 10),
+    key="set_slider",
+)
     st.markdown("</div>", unsafe_allow_html=True)
     total_reps = total_sets * 15 * len(FULLBODY_EXERCISES)
     st.markdown(
